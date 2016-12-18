@@ -60,6 +60,9 @@ binaries: clean
 	@go build -o ./build/infrakit-instance-aws \
 	  -ldflags "-X github.com/docker/infrakit/cli.Version=$(VERSION) -X github.com/docker/infrakit/cli.Revision=$(REVISION)" \
 	  plugin/instance/cmd/main.go
+	@go build -o ./build/infrakit-reflect-aws \
+	  -ldflags "-X github.com/docker/infrakit/cli.Version=$(VERSION) -X github.com/docker/infrakit/cli.Revision=$(REVISION)" \
+	  plugin/reflect/cmd/main.go
 
 install:
 	@echo "+ $@"
