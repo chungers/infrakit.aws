@@ -57,6 +57,19 @@ func (c *cfnPlugin) Render(model EnvironmentModel, templateURL string) ([]byte, 
 			}
 			return "null"
 		},
+		"include": func(p string, o interface{}) (string, error) {
+			if loc, err := getURL(templateURL, p); err == nil {
+				if buff, err := fetch(loc); err == nil {
+					// TODO bind the same functions
+					if t, err := template.New(p).Parse(string(buff)); err == nil {
+						var buffer bytes.Buffer
+						err = t.Execute(&buffer, o)
+						return buffer.String(), err
+					}
+				}
+			}
+			return "", err
+		},
 	}).Parse(string(buff))
 	if err != nil {
 		return nil, err

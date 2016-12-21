@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -86,6 +87,17 @@ func tokenize(s string) []string {
 	}
 
 	return a
+}
+
+// returns a url string of the base and a relative path.
+// e.g. http://host/foo/bar/baz, ./boo.tpl gives http://host/foo/bar/boo.tpl
+func getURL(root, rel string) (string, error) {
+	u, err := url.Parse(root)
+	if err != nil {
+		return "", err
+	}
+	u.Path = filepath.Clean(filepath.Join(filepath.Dir(u.Path), rel))
+	return u.String(), nil
 }
 
 func fetch(s string) ([]byte, error) {

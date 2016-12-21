@@ -6,5 +6,6 @@
    "PubSubnetAz1Cidr" : "{{ describe "/Resources/AWS::EC2::Subnet/PubSubnetAz1" . | ref "/CidrBlock" }}",
    "VpcCidrBlock" : "{{ describe "/Resources/AWS::EC2::VPC/Vpc" . | ref "/CidrBlock"}}",
    "ManagerAsg" : {{ describe "/Resources/AWS::AutoScaling::AutoScalingGroup/ManagerAsg" . | json }},
-   "ManagerLaunch" : {{ describe "/Resources/AWS::AutoScaling::LaunchConfiguration/ManagerLaunchConfigBeta13" . | json }}
+   "ManagerLaunch" : {{ describe "/Resources/AWS::AutoScaling::LaunchConfiguration/ManagerLaunchConfigBeta13" . | json }},
+   "Include" : {{ include "include.tpl" }}
 }
