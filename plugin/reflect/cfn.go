@@ -1,10 +1,7 @@
 package reflect
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"text/template"
 
 	"github.com/aws/aws-sdk-go/service/autoscaling/autoscalingiface"
 	"github.com/aws/aws-sdk-go/service/cloudformation"
@@ -28,60 +25,26 @@ func NewCFNPlugin(clients AWSClients, namespaceTags map[string]string) Plugin {
 	return &cfnPlugin{clients: clients, namespaceTags: namespaceTags}
 }
 
-func (c *cfnPlugin) Render(model EnvironmentModel, templateURL string) ([]byte, error) {
-	buff, err := fetch(templateURL)
+func (c *cfnPlugin) Render(model EnvironmentModel, templateURL string) (string, error) {
+	t, err := NewTemplate(templateURL)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	t, err := template.New("template").Funcs(map[string]interface{}{
-		"ref": func(p string, o interface{}) interface{} {
-			return get(o, tokenize(p))
-		},
-		"describe": func(p string, o interface{}) interface{} {
-			obj := get(o, tokenize(p))
-			r, is := obj.(*cloudformation.StackResource)
-			if !is || r == nil {
-				return nil
-			}
-			d, err := describe(c.clients, r)
-			if err == nil {
-				return d
-			}
-			return err
-		},
-		"json": func(o interface{}) string {
-			buff, err := json.MarshalIndent(o, "", "  ")
-			if err == nil {
-				return string(buff)
-			}
-			return "null"
-		},
-		"include": func(p string, o interface{}) (string, error) {
-			if loc, err := getURL(templateURL, p); err == nil {
-				if buff, err := fetch(loc); err == nil {
-					// TODO bind the same functions
-					if t, err := template.New(p).Parse(string(buff)); err == nil {
-						var buffer bytes.Buffer
-						err = t.Execute(&buffer, o)
-						return buffer.String(), err
-					}
-				}
-			}
-			return "", err
-		},
-	}).Parse(string(buff))
-	if err != nil {
-		return nil, err
-	}
+	t.AddFunc("describe", func(p string, o interface{}) interface{} {
+		obj := get(o, tokenize(p))
+		r, is := obj.(*cloudformation.StackResource)
+		if !is || r == nil {
+			return nil
+		}
+		d, err := describe(c.clients, r)
+		if err == nil {
+			return d
+		}
+		return err
+	})
 
-	var buffer bytes.Buffer
-	err = t.Execute(&buffer, model)
-	if err != nil {
-		return nil, err
-	}
-
-	return buffer.Bytes(), err
+	return t.Render(model)
 }
 
 func (c *cfnPlugin) Inspect(name string) (EnvironmentModel, error) {

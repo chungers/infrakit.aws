@@ -95,18 +95,12 @@ func main() {
 				os.Exit(1)
 			}
 
-			buff, err := json.MarshalIndent(model, "", "  ")
-			if err != nil {
-				log.Error(err)
-				os.Exit(1)
-			}
-
 			// apply the template
-			buff, err = reflector.Render(model, templateURL)
+			view, err := reflector.Render(model, templateURL)
 			if err != nil {
 				return err
 			}
-			fmt.Println(string(buff))
+			fmt.Println(view)
 			return nil
 		},
 	}
