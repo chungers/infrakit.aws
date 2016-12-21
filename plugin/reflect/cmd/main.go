@@ -18,12 +18,16 @@ func main() {
 	builder := &reflect.Builder{}
 
 	var logLevel int
-	var name, stack string
+	var name, stack, templateURL string
 	var namespaceTags []string
+	var reflector reflect.Plugin
+
 	cmd := &cobra.Command{
 		Use:   os.Args[0],
 		Short: "AWS instance plugin",
-		Run: func(c *cobra.Command, args []string) {
+		PersistentPreRunE: func(c *cobra.Command, args []string) error {
+
+			cli.SetLogLevel(logLevel)
 
 			namespace := map[string]string{}
 			for _, tagKV := range namespaceTags {
@@ -38,43 +42,83 @@ func main() {
 
 			reflectPlugin, err := builder.BuildReflectPlugin(namespace)
 			if err != nil {
-				log.Error(err)
-				os.Exit(1)
+				return err
 			}
 
-			cli.SetLogLevel(logLevel)
+			reflector = reflectPlugin
+			return nil
+		},
+	}
+	// TODO(chungers) - the exposed flags here won't be set in plugins, because Docker engine plugin install doesn't allow
+	// user to pass in command line args like containers with entrypoint.
+	cmd.PersistentFlags().IntVar(&logLevel, "log", cli.DefaultLogLevel, "Logging level. 0 is least verbose. Max is 5")
+	cmd.PersistentFlags().StringVar(&name, "name", "reflect-aws", "Plugin name to advertise for discovery")
+	cmd.PersistentFlags().StringVar(&stack, "stack", "myCFNStack", "CFN stack name to introspect")
+	cmd.PersistentFlags().AddFlagSet(builder.Flags())
 
-			spec, err := reflectPlugin.Inspect(stack)
-			if err != nil {
-				log.Error(err)
-				os.Exit(1)
+	inspectCmd := &cobra.Command{
+		Use:   "inspect",
+		Short: "Inspect stack",
+		RunE: func(c *cobra.Command, args []string) error {
+
+			if reflector == nil {
+				return fmt.Errorf("no plugin")
 			}
 
-			buff, err := json.MarshalIndent(spec, "", "  ")
+			model, err := reflector.Inspect(stack)
 			if err != nil {
-				log.Error(err)
-				os.Exit(1)
+				return err
+			}
+
+			buff, err := json.MarshalIndent(model, "", "  ")
+			if err != nil {
+				return err
 			}
 
 			fmt.Println(string(buff))
-			//			cli.RunPlugin(name, reflect_plugin.PluginServer(reflectPlugin))
+			return nil
 		},
 	}
 
-	cmd.Flags().IntVar(&logLevel, "log", cli.DefaultLogLevel, "Logging level. 0 is least verbose. Max is 5")
-	cmd.Flags().StringVar(&name, "name", "reflect-aws", "Plugin name to advertise for discovery")
-	cmd.Flags().StringVar(&stack, "stack", "myCFNStack", "CFN stack name to introspect")
-	cmd.Flags().StringSliceVar(
-		&namespaceTags,
-		"namespace-tags",
-		[]string{},
-		"A list of key=value resource tags to namespace all resources created")
+	renderCmd := &cobra.Command{
+		Use:   "render",
+		Short: "Render Infrakit config",
+		RunE: func(c *cobra.Command, args []string) error {
 
-	// TODO(chungers) - the exposed flags here won't be set in plugins, because plugin install doesn't allow
-	// user to pass in command line args like containers with entrypoint.
-	cmd.Flags().AddFlagSet(builder.Flags())
+			if reflector == nil {
+				return fmt.Errorf("no plugin")
+			}
 
-	cmd.AddCommand(cli.VersionCommand())
+			model, err := reflector.Inspect(stack)
+			if err != nil {
+				log.Error(err)
+				os.Exit(1)
+			}
+
+			buff, err := json.MarshalIndent(model, "", "  ")
+			if err != nil {
+				log.Error(err)
+				os.Exit(1)
+			}
+
+			// apply the template
+			spec, err := reflector.Render(model, templateURL)
+			if err != nil {
+				return err
+			}
+
+			buff, err = json.MarshalIndent(spec, "", "  ")
+			if err != nil {
+				return err
+			}
+
+			fmt.Println(string(buff))
+			return nil
+		},
+	}
+	renderCmd.Flags().StringVar(&templateURL, "template", "", "URL to the template to render")
+
+	cmd.AddCommand(cli.VersionCommand(), inspectCmd, renderCmd)
 
 	err := cmd.Execute()
 	if err != nil {

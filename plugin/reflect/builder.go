@@ -11,7 +11,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/cloudformation"
+	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/docker/infrakit.aws/plugin/instance"
 	"github.com/spf13/pflag"
 )
@@ -80,7 +82,11 @@ func (b *Builder) BuildReflectPlugin(namespaceTags map[string]string) (Plugin, e
 			WithMaxRetries(b.options.retries))
 	}
 
-	return NewCFNPlugin(cloudformation.New(b.Config), namespaceTags), nil
+	return NewCFNPlugin(AWSClients{
+		Cfn: cloudformation.New(b.Config),
+		Ec2: ec2.New(b.Config),
+		Asg: autoscaling.New(b.Config),
+	}, namespaceTags), nil
 }
 
 type logger struct {

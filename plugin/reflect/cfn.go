@@ -7,59 +7,95 @@ import (
 	"text/template"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/aws/aws-sdk-go/service/autoscaling/autoscalingiface"
 	"github.com/aws/aws-sdk-go/service/cloudformation"
 	"github.com/aws/aws-sdk-go/service/cloudformation/cloudformationiface"
+	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"github.com/docker/infrakit/pkg/manager"
 )
 
-type Plugin interface {
-	Inspect(name string) (manager.GlobalSpec, error)
+type AWSClients struct {
+	Cfn cloudformationiface.CloudFormationAPI
+	Ec2 ec2iface.EC2API
+	Asg autoscalingiface.AutoScalingAPI
 }
 
-const (
-	// VolumeTag is the AWS tag name used to associate unique identifiers (instance.VolumeID) with volumes.
-	VolumeTag = "docker-infrakit-volume"
-)
-
 type cfnPlugin struct {
-	client        cloudformationiface.CloudFormationAPI
+	clients       AWSClients
 	namespaceTags map[string]string
 }
 
 // NewCFNPlugin creates a new plugin that can introspect a Cloudformation stack
-func NewCFNPlugin(client cloudformationiface.CloudFormationAPI, namespaceTags map[string]string) Plugin {
-	return &cfnPlugin{client: client, namespaceTags: namespaceTags}
+func NewCFNPlugin(clients AWSClients, namespaceTags map[string]string) Plugin {
+	return &cfnPlugin{clients: clients, namespaceTags: namespaceTags}
 }
 
-func (c *cfnPlugin) Inspect(name string) (manager.GlobalSpec, error) {
+func (c *cfnPlugin) Render(model EnvironmentModel, templateURL string) (manager.GlobalSpec, error) {
 	spec := manager.GlobalSpec{}
 
-	log.Infoln("Inspecting", name)
+	buff, err := fetch(templateURL)
+	if err != nil {
+		return spec, err
+	}
+
+	t, err := template.New("template").Funcs(map[string]interface{}{
+		"ref": func(p string, o interface{}) interface{} {
+			return get(o, tokenize(p))
+		},
+		"describe": func(p string, o interface{}) interface{} {
+			obj := get(o, tokenize(p))
+			r, is := obj.(*cloudformation.StackResource)
+			if !is || r == nil {
+				return nil
+			}
+			d, err := describe(c.clients, r)
+			if err == nil {
+				return d
+			}
+			return err
+		},
+	}).Parse(string(buff))
+	if err != nil {
+		return spec, err
+	}
+
+	var buffer bytes.Buffer
+	err = t.Execute(&buffer, model)
+	if err != nil {
+		return spec, err
+	}
+
+	log.Infoln(buffer.String())
+
+	err = json.Unmarshal(buffer.Bytes(), &spec)
+	return spec, err
+}
+
+func (c *cfnPlugin) Inspect(name string) (EnvironmentModel, error) {
+	model := EnvironmentModel{}
 
 	input := cloudformation.DescribeStacksInput{
 		StackName: &name,
 	}
 
-	output, err := c.client.DescribeStacks(&input)
+	output, err := c.clients.Cfn.DescribeStacks(&input)
 	if err != nil {
-		return spec, err
+		return model, err
 	}
 
 	if len(output.Stacks) == 0 {
-		return spec, fmt.Errorf("invalid stack %v", name)
+		return model, fmt.Errorf("invalid stack %v", name)
 	}
 
-	output2, err := c.client.DescribeStackResources(&cloudformation.DescribeStackResourcesInput{
+	output2, err := c.clients.Cfn.DescribeStackResources(&cloudformation.DescribeStackResourcesInput{
 		StackName: &name,
 	})
 	if err != nil {
-		return spec, err
+		return model, err
 	}
 
-	combined := map[string]interface{}{}
-
 	// index resources by type/name
-	resources := map[string]interface{}{}
+	resources := map[string]map[string]interface{}{}
 	for _, r := range output2.StackResources {
 		if r.ResourceType == nil {
 			continue
@@ -71,9 +107,9 @@ func (c *cfnPlugin) Inspect(name string) (manager.GlobalSpec, error) {
 		if resources[*r.ResourceType] == nil {
 			resources[*r.ResourceType] = map[string]interface{}{}
 		}
-		resources[*r.ResourceType].(map[string]interface{})[*r.LogicalResourceId] = r
+		resources[*r.ResourceType][*r.LogicalResourceId] = r
 	}
-	combined["Resources"] = resources
+	model.Resources = resources
 
 	// index parameters by name
 	parameters := map[string]interface{}{}
@@ -83,55 +119,7 @@ func (c *cfnPlugin) Inspect(name string) (manager.GlobalSpec, error) {
 		}
 		parameters[*p.ParameterKey] = p
 	}
-	combined["Parameters"] = parameters
+	model.Parameters = parameters
 
-	// index outputs by name
-	outputs := map[string]interface{}{}
-	for _, o := range output.Stacks[0].Outputs {
-		if o.OutputKey == nil {
-			continue
-		}
-		outputs[*o.OutputKey] = o
-	}
-	combined["Outputs"] = outputs
-	l := []interface{}{}
-	for _, s := range output2.StackResources {
-		l = append(l, s)
-	}
-	combined["ResourcesList"] = l
-
-	// dump out json
-	buff, err := json.MarshalIndent(combined, "", "  ")
-	if err != nil {
-		return spec, err
-	}
-	log.Infoln(string(buff))
-
-	// apply template
-
-	test := `
-{
-   "VPCId" : "{{ ref . "/Resources/AWS::EC2::VPC/Vpc/PhysicalResourceId" }}",
-   "LastResourceId" : "{{ ref . "/ResourcesList[-1]/PhysicalResourceId" }}",
-   "SubnetId" : "{{ ref . "/Resources/AWS::EC2::Subnet/PubSubnetAz1/PhysicalResourceId" }}",
-   "Managers" : {{ ref . "/Parameters/ManagerSize/ParameterValue" }}
-}
-`
-	t, err := template.New("template").Funcs(map[string]interface{}{
-		"ref": func(o interface{}, p string) interface{} {
-			return get(o, tokenize(p))
-		},
-	}).Parse(test)
-	if err != nil {
-		return spec, err
-	}
-
-	var buffer bytes.Buffer
-	err = t.Execute(&buffer, combined)
-	if err != nil {
-		return spec, err
-	}
-
-	log.Infoln(buffer.String())
-	return spec, nil
+	return model, nil
 }

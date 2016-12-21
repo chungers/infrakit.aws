@@ -2,6 +2,9 @@ package reflect
 
 import (
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -32,30 +35,26 @@ func get(object interface{}, path []string) interface{} {
 		return get(object, path)
 	}
 
-	switch object := object.(type) {
-	case map[string]interface{}:
-		if v, has := object[key]; has {
-			return get(v, path[1:])
-		}
-
-	case []interface{}:
+	v := reflect.Indirect(reflect.ValueOf(object))
+	switch v.Kind() {
+	case reflect.Slice:
+		i := 0
 		matches = indexExp.FindStringSubmatch(key)
 		if len(matches) == 2 {
 			if index, err := strconv.Atoi(matches[1]); err == nil {
 				switch {
-				case index > 0 && len(object) > index:
-					return get(object[index], path[1:])
-				case index < 0 && len(object) > -index: // negative index like python
-					return get(object[len(object)+index], path[1:])
+				case index >= 0 && v.Len() > index:
+					i = index
+				case index < 0 && v.Len() > -index: // negative index like python
+					i = v.Len() + index
 				}
 			}
 		}
-
-	default:
-		v := reflect.Indirect(reflect.ValueOf(object))
-		if v.Kind() == reflect.Struct {
-			return v.FieldByName(key).Interface()
-		}
+		return get(v.Index(i).Interface(), path[1:])
+	case reflect.Map:
+		return get(v.MapIndex(reflect.ValueOf(key)).Interface(), path[1:])
+	case reflect.Struct:
+		return get(v.FieldByName(key).Interface(), path[1:])
 	}
 	return nil
 }
@@ -87,4 +86,26 @@ func tokenize(s string) []string {
 	}
 
 	return a
+}
+
+func fetch(s string) ([]byte, error) {
+	u, err := url.Parse(s)
+	if err != nil {
+		return nil, err
+	}
+
+	switch u.Scheme {
+	case "file":
+		return ioutil.ReadFile(u.Path)
+
+	case "http", "https":
+		resp, err := http.Get(u.String())
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		return ioutil.ReadAll(resp.Body)
+	}
+
+	return nil, fmt.Errorf("unsupported url:%s", s)
 }

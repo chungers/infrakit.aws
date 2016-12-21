@@ -1,0 +1,58 @@
+{
+    "Groups" : {
+        "managers" : {
+            "ID": "managers",
+            "Properties": {
+                "Allocation": {
+                    "LogicalIDs": [ "192.168.33.1", "192.168.34.1", "192.168.35.1" ]
+                },
+                "Instance": {
+                    "Plugin": "instance-aws",
+                    "Properties": {{.CreateInstanceRequest}}
+                },
+                "Flavor": {
+                    "Plugin": "flavor-combo",
+                    "Properties": {
+                        "Flavors": [
+                            {
+                                "Plugin": "flavor-vanilla",
+                                "Properties": {
+                                    "Init": [
+                                        "#!/bin/bash",
+                                        {{.BootScript}}
+                                    ]
+                                }
+                            },
+                            {
+                                "Plugin": "flavor-swarm",
+                                "Properties": {
+                                    "Type": "manager",
+                                    "DockerRestartCommand": "systemctl restart docker"
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+        "workers" : {
+            "ID": "workers",
+            "Properties": {
+                "Allocation": {
+                    "Size": 3
+                },
+                "Instance": {
+                    "Plugin": "instance-aws",
+                    "Properties": {{.CreateInstanceRequest}}
+                },
+                "Flavor": {
+                    "Plugin": "flavor-swarm",
+                    "Properties": {
+                        "Type": "worker",
+                        "DockerRestartCommand": "systemctl restart docker"
+                    }
+                }
+            }
+        }
+    }
+}
