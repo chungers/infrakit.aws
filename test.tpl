@@ -7,5 +7,5 @@
    "VpcCidrBlock" : "{{ describe "/Resources/AWS::EC2::VPC/Vpc" . | ref "/CidrBlock"}}",
    "ManagerAsg" : {{ describe "/Resources/AWS::AutoScaling::AutoScalingGroup/ManagerAsg" . | json }},
    "ManagerLaunch" : {{ describe "/Resources/AWS::AutoScaling::LaunchConfiguration/ManagerLaunchConfigBeta13" . | json }},
-   "Include" : {{ include "include.tpl" }}
+   "Include" : {{ include "include.tpl" . }}
 }
