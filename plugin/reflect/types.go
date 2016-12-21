@@ -1,9 +1,5 @@
 package reflect
 
-import (
-	"github.com/docker/infrakit/pkg/manager"
-)
-
 // EnvironmentModel is a common model that captures information about a cloud environment.
 // It can be a version of CloudFormation data or Azure resource templates
 type EnvironmentModel struct {
@@ -21,5 +17,5 @@ type Plugin interface {
 	Inspect(name string) (EnvironmentModel, error)
 
 	// Render takes the given model and applies the template at the given URL to produce a global spec for InfraKit.
-	Render(model EnvironmentModel, templateURL string) (manager.GlobalSpec, error)
+	Render(model EnvironmentModel, templateURL string) ([]byte, error)
 }

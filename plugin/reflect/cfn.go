@@ -6,12 +6,10 @@ import (
 	"fmt"
 	"text/template"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/aws/aws-sdk-go/service/autoscaling/autoscalingiface"
 	"github.com/aws/aws-sdk-go/service/cloudformation"
 	"github.com/aws/aws-sdk-go/service/cloudformation/cloudformationiface"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
-	"github.com/docker/infrakit/pkg/manager"
 )
 
 type AWSClients struct {
@@ -30,12 +28,10 @@ func NewCFNPlugin(clients AWSClients, namespaceTags map[string]string) Plugin {
 	return &cfnPlugin{clients: clients, namespaceTags: namespaceTags}
 }
 
-func (c *cfnPlugin) Render(model EnvironmentModel, templateURL string) (manager.GlobalSpec, error) {
-	spec := manager.GlobalSpec{}
-
+func (c *cfnPlugin) Render(model EnvironmentModel, templateURL string) ([]byte, error) {
 	buff, err := fetch(templateURL)
 	if err != nil {
-		return spec, err
+		return nil, err
 	}
 
 	t, err := template.New("template").Funcs(map[string]interface{}{
@@ -54,21 +50,25 @@ func (c *cfnPlugin) Render(model EnvironmentModel, templateURL string) (manager.
 			}
 			return err
 		},
+		"json": func(o interface{}) string {
+			buff, err := json.MarshalIndent(o, "", "  ")
+			if err == nil {
+				return string(buff)
+			}
+			return "null"
+		},
 	}).Parse(string(buff))
 	if err != nil {
-		return spec, err
+		return nil, err
 	}
 
 	var buffer bytes.Buffer
 	err = t.Execute(&buffer, model)
 	if err != nil {
-		return spec, err
+		return nil, err
 	}
 
-	log.Infoln(buffer.String())
-
-	err = json.Unmarshal(buffer.Bytes(), &spec)
-	return spec, err
+	return buffer.Bytes(), err
 }
 
 func (c *cfnPlugin) Inspect(name string) (EnvironmentModel, error) {

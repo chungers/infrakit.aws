@@ -102,16 +102,10 @@ func main() {
 			}
 
 			// apply the template
-			spec, err := reflector.Render(model, templateURL)
+			buff, err = reflector.Render(model, templateURL)
 			if err != nil {
 				return err
 			}
-
-			buff, err = json.MarshalIndent(spec, "", "  ")
-			if err != nil {
-				return err
-			}
-
 			fmt.Println(string(buff))
 			return nil
 		},
