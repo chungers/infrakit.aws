@@ -2,9 +2,10 @@ package reflect
 
 import (
 	"bytes"
-	"encoding/json"
 	"sync"
 	"text/template"
+
+	"github.com/Masterminds/sprig"
 )
 
 type Template struct {
@@ -40,27 +41,10 @@ func (t *Template) build() error {
 		return nil
 	}
 
-	fm := map[string]interface{}{
-		"ref": func(p string, o interface{}) interface{} {
-			return get(o, tokenize(p))
-		},
+	fm := t.DefaultFuncs()
 
-		"json": func(o interface{}) (string, error) {
-			buff, err := json.MarshalIndent(o, "", "  ")
-			return string(buff), err
-		},
-
-		"include": func(p string, o interface{}) (string, error) {
-			loc, err := getURL(t.url, p)
-			if err != nil {
-				return "", err
-			}
-			included, err := NewTemplate(loc)
-			if err != nil {
-				return "", err
-			}
-			return included.Render(o)
-		},
+	for k, v := range sprig.TxtFuncMap() {
+		fm[k] = v
 	}
 
 	for k, v := range t.funcs {
