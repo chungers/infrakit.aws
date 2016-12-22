@@ -30,7 +30,12 @@ func (t *Template) DefaultFuncs() map[string]interface{} {
 			return ret, fmt.Errorf("not-supported-value-type")
 		},
 
-		"include": func(p string, o interface{}) (string, error) {
+		"include": func(p string, opt ...interface{}) (string, error) {
+			var o interface{}
+			if len(opt) > 0 {
+				o = opt[0]
+			}
+
 			loc, err := getURL(t.url, p)
 			if err != nil {
 				return "", err
