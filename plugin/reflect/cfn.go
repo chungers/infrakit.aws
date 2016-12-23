@@ -1,8 +1,6 @@
 package reflect
 
 import (
-	"fmt"
-
 	"github.com/aws/aws-sdk-go/service/autoscaling/autoscalingiface"
 	"github.com/aws/aws-sdk-go/service/cloudformation"
 	"github.com/aws/aws-sdk-go/service/cloudformation/cloudformationiface"
@@ -16,16 +14,15 @@ type AWSClients struct {
 }
 
 type cfnPlugin struct {
-	clients       AWSClients
-	namespaceTags map[string]string
+	clients AWSClients
 }
 
 // NewCFNPlugin creates a new plugin that can introspect a Cloudformation stack
-func NewCFNPlugin(clients AWSClients, namespaceTags map[string]string) Plugin {
-	return &cfnPlugin{clients: clients, namespaceTags: namespaceTags}
+func NewCFNPlugin(clients AWSClients) Plugin {
+	return &cfnPlugin{clients: clients}
 }
 
-func (c *cfnPlugin) Render(model EnvironmentModel, templateURL string) (string, error) {
+func (c *cfnPlugin) Render(templateURL string) (string, error) {
 	t, err := NewTemplate(templateURL)
 	if err != nil {
 		return "", err
@@ -43,59 +40,12 @@ func (c *cfnPlugin) Render(model EnvironmentModel, templateURL string) (string, 
 		}
 		return err
 	})
-
-	return t.Render(model)
+	t.AddFunc("cfn", func(p string) (interface{}, error) {
+		return cfn(c.clients, p)
+	})
+	return t.Render(nil)
 }
 
 func (c *cfnPlugin) Inspect(name string) (EnvironmentModel, error) {
-	model := EnvironmentModel{}
-
-	input := cloudformation.DescribeStacksInput{
-		StackName: &name,
-	}
-
-	output, err := c.clients.Cfn.DescribeStacks(&input)
-	if err != nil {
-		return model, err
-	}
-
-	if len(output.Stacks) == 0 {
-		return model, fmt.Errorf("invalid stack %v", name)
-	}
-
-	output2, err := c.clients.Cfn.DescribeStackResources(&cloudformation.DescribeStackResourcesInput{
-		StackName: &name,
-	})
-	if err != nil {
-		return model, err
-	}
-
-	// index resources by type/name
-	resources := map[string]map[string]interface{}{}
-	for _, r := range output2.StackResources {
-		if r.ResourceType == nil {
-			continue
-		}
-		if r.LogicalResourceId == nil {
-			continue
-		}
-
-		if resources[*r.ResourceType] == nil {
-			resources[*r.ResourceType] = map[string]interface{}{}
-		}
-		resources[*r.ResourceType][*r.LogicalResourceId] = r
-	}
-	model.Resources = resources
-
-	// index parameters by name
-	parameters := map[string]interface{}{}
-	for _, p := range output.Stacks[0].Parameters {
-		if p.ParameterKey == nil {
-			continue
-		}
-		parameters[*p.ParameterKey] = p
-	}
-	model.Parameters = parameters
-
-	return model, nil
+	return cfn(c.clients, name)
 }

@@ -9,17 +9,15 @@ import (
 	"github.com/docker/infrakit.aws/plugin/reflect"
 	"github.com/docker/infrakit/cli"
 	"github.com/spf13/cobra"
-	"strings"
 )
 
 // go run plugin/reflect/cmd/main.go --stack dchung1 --region us-west-1 will reflect on the stack 'dchung1'
 func main() {
 
-	builder := &reflect.Builder{}
+	options := &reflect.Options{}
 
 	var logLevel int
 	var name, stack, templateURL string
-	var namespaceTags []string
 	var reflector reflect.Plugin
 
 	cmd := &cobra.Command{
@@ -29,18 +27,7 @@ func main() {
 
 			cli.SetLogLevel(logLevel)
 
-			namespace := map[string]string{}
-			for _, tagKV := range namespaceTags {
-				keyAndValue := strings.Split(tagKV, "=")
-				if len(keyAndValue) != 2 {
-					log.Error("Namespace tags must be formatted as key=value")
-					os.Exit(1)
-				}
-
-				namespace[keyAndValue[0]] = keyAndValue[1]
-			}
-
-			reflectPlugin, err := builder.BuildReflectPlugin(namespace)
+			reflectPlugin, err := reflect.NewPlugin(*options)
 			if err != nil {
 				return err
 			}
@@ -53,8 +40,7 @@ func main() {
 	// user to pass in command line args like containers with entrypoint.
 	cmd.PersistentFlags().IntVar(&logLevel, "log", cli.DefaultLogLevel, "Logging level. 0 is least verbose. Max is 5")
 	cmd.PersistentFlags().StringVar(&name, "name", "reflect-aws", "Plugin name to advertise for discovery")
-	cmd.PersistentFlags().StringVar(&stack, "stack", "myCFNStack", "CFN stack name to introspect")
-	cmd.PersistentFlags().AddFlagSet(builder.Flags())
+	cmd.PersistentFlags().AddFlagSet(options.Flags())
 
 	inspectCmd := &cobra.Command{
 		Use:   "inspect",
@@ -79,6 +65,7 @@ func main() {
 			return nil
 		},
 	}
+	inspectCmd.Flags().StringVar(&stack, "stack", "myCFNStack", "CFN stack name to introspect")
 
 	renderCmd := &cobra.Command{
 		Use:   "render",
@@ -89,14 +76,7 @@ func main() {
 				return fmt.Errorf("no plugin")
 			}
 
-			model, err := reflector.Inspect(stack)
-			if err != nil {
-				log.Error(err)
-				os.Exit(1)
-			}
-
-			// apply the template
-			view, err := reflector.Render(model, templateURL)
+			view, err := reflector.Render(templateURL)
 			if err != nil {
 				return err
 			}

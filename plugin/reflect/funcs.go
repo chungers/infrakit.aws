@@ -12,12 +12,12 @@ func (t *Template) DefaultFuncs() map[string]interface{} {
 			return get(o, tokenize(p))
 		},
 
-		"jsonMarshal": func(o interface{}) (string, error) {
+		"jsonEncode": func(o interface{}) (string, error) {
 			buff, err := json.MarshalIndent(o, "", "  ")
 			return string(buff), err
 		},
 
-		"jsonUnmarshal": func(o interface{}) (interface{}, error) {
+		"jsonDecode": func(o interface{}) (interface{}, error) {
 			ret := map[string]interface{}{}
 			switch o := o.(type) {
 			case string:

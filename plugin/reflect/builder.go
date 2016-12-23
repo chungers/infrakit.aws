@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
@@ -18,75 +17,70 @@ import (
 	"github.com/spf13/pflag"
 )
 
-type options struct {
-	region          string
-	accessKeyID     string
-	secretAccessKey string
-	sessionToken    string
-	retries         int
-}
-
-// Builder is a ProvisionerBuilder that creates an AWS instance provisioner.
-type Builder struct {
-	Config  client.ConfigProvider
-	options options
+type Options struct {
+	Region          string
+	AccessKeyID     string
+	SecretAccessKey string
+	SessionToken    string
+	Retries         int
+	Debug           bool
 }
 
 // Flags returns the flags required.
-func (b *Builder) Flags() *pflag.FlagSet {
+func (options *Options) Flags() *pflag.FlagSet {
 	flags := pflag.NewFlagSet("aws", pflag.PanicOnError)
-	flags.StringVar(&b.options.region, "region", "", "AWS region")
-	flags.StringVar(&b.options.accessKeyID, "access-key-id", "", "IAM access key ID")
-	flags.StringVar(&b.options.secretAccessKey, "secret-access-key", "", "IAM access key secret")
-	flags.StringVar(&b.options.sessionToken, "session-token", "", "AWS STS token")
-	flags.IntVar(&b.options.retries, "retries", 5, "Number of retries for AWS API operations")
+	flags.BoolVar(&options.Debug, "api-debug", false, "True to turn on API debugging")
+	flags.StringVar(&options.Region, "region", "", "AWS region")
+	flags.StringVar(&options.AccessKeyID, "access-key-id", "", "IAM access key ID")
+	flags.StringVar(&options.SecretAccessKey, "secret-access-key", "", "IAM access key secret")
+	flags.StringVar(&options.SessionToken, "session-token", "", "AWS STS token")
+	flags.IntVar(&options.Retries, "retries", 5, "Number of retries for AWS API operations")
 	return flags
 }
 
-// BuildInstancePlugin creates an instance Provisioner configured with the Flags.
-func (b *Builder) BuildReflectPlugin(namespaceTags map[string]string) (Plugin, error) {
-	if b.Config == nil {
-		providers := []credentials.Provider{
-			&ec2rolecreds.EC2RoleProvider{Client: ec2metadata.New(session.New())},
-			&credentials.EnvProvider{},
-			&credentials.SharedCredentialsProvider{},
+// NewPlugin creates an instance Provisioner configured with the Flags.
+func NewPlugin(options Options) (Plugin, error) {
+	providers := []credentials.Provider{
+		&ec2rolecreds.EC2RoleProvider{Client: ec2metadata.New(session.New())},
+		&credentials.EnvProvider{},
+		&credentials.SharedCredentialsProvider{},
+	}
+	if (len(options.AccessKeyID) > 0 && len(options.SecretAccessKey) > 0) || len(options.SessionToken) > 0 {
+		staticCreds := credentials.StaticProvider{
+			Value: credentials.Value{
+				AccessKeyID:     options.AccessKeyID,
+				SecretAccessKey: options.SecretAccessKey,
+				SessionToken:    options.SessionToken,
+			},
 		}
-
-		if (len(b.options.accessKeyID) > 0 && len(b.options.secretAccessKey) > 0) || len(b.options.sessionToken) > 0 {
-			staticCreds := credentials.StaticProvider{
-				Value: credentials.Value{
-					AccessKeyID:     b.options.accessKeyID,
-					SecretAccessKey: b.options.secretAccessKey,
-					SessionToken:    b.options.sessionToken,
-				},
-			}
-			providers = append(providers, &staticCreds)
-		}
-
-		if b.options.region == "" {
-			log.Println("region not specified, attempting to discover from EC2 instance metadata")
-			region, err := instance.GetRegion()
-			if err != nil {
-				return nil, errors.New("Unable to determine region")
-			}
-
-			log.Printf("Defaulting to local region %s\n", region)
-			b.options.region = region
-		}
-
-		b.Config = session.New(aws.NewConfig().
-			WithRegion(b.options.region).
-			WithCredentials(credentials.NewChainCredentials(providers)).
-			WithLogger(GetLogger()).
-			//WithLogLevel(aws.LogDebugWithRequestErrors).
-			WithMaxRetries(b.options.retries))
+		providers = append(providers, &staticCreds)
 	}
 
+	if options.Region == "" {
+		log.Println("region not specified, attempting to discover from EC2 instance metadata")
+		region, err := instance.GetRegion()
+		if err != nil {
+			return nil, errors.New("Unable to determine region")
+		}
+
+		log.Printf("Defaulting to local region %s\n", region)
+		options.Region = region
+	}
+
+	config := aws.NewConfig().
+		WithRegion(options.Region).
+		WithCredentials(credentials.NewChainCredentials(providers)).
+		WithLogger(GetLogger()).
+		WithMaxRetries(options.Retries)
+	if options.Debug {
+		config.WithLogLevel(aws.LogDebugWithRequestErrors)
+	}
+	session := session.New(config)
+
 	return NewCFNPlugin(AWSClients{
-		Cfn: cloudformation.New(b.Config),
-		Ec2: ec2.New(b.Config),
-		Asg: autoscaling.New(b.Config),
-	}, namespaceTags), nil
+		Cfn: cloudformation.New(session),
+		Ec2: ec2.New(session),
+		Asg: autoscaling.New(session)}), nil
 }
 
 type logger struct {

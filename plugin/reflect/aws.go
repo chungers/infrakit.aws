@@ -85,3 +85,56 @@ func describe(clients AWSClients, r *cloudformation.StackResource) (interface{},
 	}
 	return nil, ErrNotSupported
 }
+
+func cfn(clients AWSClients, name string) (EnvironmentModel, error) {
+	model := EnvironmentModel{}
+
+	input := cloudformation.DescribeStacksInput{
+		StackName: &name,
+	}
+
+	output, err := clients.Cfn.DescribeStacks(&input)
+	if err != nil {
+		return model, err
+	}
+
+	if len(output.Stacks) == 0 {
+		return model, fmt.Errorf("invalid stack %v", name)
+	}
+
+	output2, err := clients.Cfn.DescribeStackResources(&cloudformation.DescribeStackResourcesInput{
+		StackName: &name,
+	})
+	if err != nil {
+		return model, err
+	}
+
+	// index resources by type/name
+	resources := map[string]map[string]interface{}{}
+	for _, r := range output2.StackResources {
+		if r.ResourceType == nil {
+			continue
+		}
+		if r.LogicalResourceId == nil {
+			continue
+		}
+
+		if resources[*r.ResourceType] == nil {
+			resources[*r.ResourceType] = map[string]interface{}{}
+		}
+		resources[*r.ResourceType][*r.LogicalResourceId] = r
+	}
+	model.Resources = resources
+
+	// index parameters by name
+	parameters := map[string]interface{}{}
+	for _, p := range output.Stacks[0].Parameters {
+		if p.ParameterKey == nil {
+			continue
+		}
+		parameters[*p.ParameterKey] = p
+	}
+	model.Parameters = parameters
+
+	return model, nil
+}
