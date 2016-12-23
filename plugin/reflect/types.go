@@ -17,5 +17,5 @@ type Plugin interface {
 	Inspect(name string) (EnvironmentModel, error)
 
 	// Render the template at the given URL to produce a global spec for InfraKit.
-	Render(templateURL string) (string, error)
+	Render(templateURL string, context interface{}) (string, error)
 }

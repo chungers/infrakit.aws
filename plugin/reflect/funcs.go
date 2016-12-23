@@ -11,10 +11,12 @@ func (t *Template) DefaultFuncs() map[string]interface{} {
 		"var": func(name, doc string) interface{} {
 			return t.binds[name]
 		},
+
 		"alias": func(name string, v interface{}) interface{} {
 			t.binds[name] = v
 			return ""
 		},
+
 		"ref": func(p string, o interface{}) interface{} {
 			return get(o, tokenize(p))
 		},

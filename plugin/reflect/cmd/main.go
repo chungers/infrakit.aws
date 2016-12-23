@@ -76,7 +76,7 @@ func main() {
 				return fmt.Errorf("no plugin")
 			}
 
-			view, err := reflector.Render(templateURL)
+			view, err := reflector.Render(templateURL, nil)
 			if err != nil {
 				return err
 			}

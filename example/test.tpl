@@ -13,7 +13,7 @@
    "ManagerLaunch" : {{ describe "/Resources/AWS::AutoScaling::LaunchConfiguration/ManagerLaunchConfigBeta13" . | jsonEncode }},
    "Include" : {{ include "include.tpl" . }},
 
-   {{/* references a value that's been aliased with 'as' */}}
+   {{/* references a value that's been given an alias */}}
    "binding" : {{ var "binding" "some binding object" | jsonEncode }}
 }
 

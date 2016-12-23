@@ -22,7 +22,7 @@ func NewCFNPlugin(clients AWSClients) Plugin {
 	return &cfnPlugin{clients: clients}
 }
 
-func (c *cfnPlugin) Render(templateURL string) (string, error) {
+func (c *cfnPlugin) Render(templateURL string, context interface{}) (string, error) {
 	t, err := NewTemplate(templateURL)
 	if err != nil {
 		return "", err
@@ -43,7 +43,7 @@ func (c *cfnPlugin) Render(templateURL string) (string, error) {
 	t.AddFunc("cfn", func(p string) (interface{}, error) {
 		return cfn(c.clients, p)
 	})
-	return t.Render(nil)
+	return t.Render(context)
 }
 
 func (c *cfnPlugin) Inspect(name string) (EnvironmentModel, error) {
