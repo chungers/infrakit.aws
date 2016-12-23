@@ -22,7 +22,7 @@ func main() {
 
 	cmd := &cobra.Command{
 		Use:   os.Args[0],
-		Short: "AWS instance plugin",
+		Short: "AWS reflect plugin",
 		PersistentPreRunE: func(c *cobra.Command, args []string) error {
 
 			cli.SetLogLevel(logLevel)

@@ -3,8 +3,10 @@ package reflect
 import (
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -127,7 +129,43 @@ func fetch(s string) ([]byte, error) {
 		}
 		defer resp.Body.Close()
 		return ioutil.ReadAll(resp.Body)
+
+	case "unix":
+		// unix: will look for a socket that matches the host name at a
+		// directory path set by environment variable.
+		c, err := socketClient(u)
+		if err != nil {
+			return nil, err
+		}
+		u.Scheme = "http"
+		resp, err := c.Get(u.String())
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		return ioutil.ReadAll(resp.Body)
 	}
 
 	return nil, fmt.Errorf("unsupported url:%s", s)
+}
+
+const (
+	// EnvUnixSocketDir is the environment variable used by the unix:// client to locate the sockets (=hostname in url)
+	EnvUnixSocketDir = "SOCKET_DIR"
+)
+
+func socketClient(u *url.URL) (*http.Client, error) {
+	socketPath := filepath.Join(os.Getenv(EnvUnixSocketDir), u.Host)
+	if f, err := os.Stat(socketPath); err != nil {
+		return nil, err
+	} else if f.Mode()&os.ModeSocket == 0 {
+		return nil, fmt.Errorf("not-a-socket:%v", socketPath)
+	}
+	return &http.Client{
+		Transport: &http.Transport{
+			Dial: func(proto, addr string) (conn net.Conn, err error) {
+				return net.Dial("unix", socketPath)
+			},
+		},
+	}, nil
 }

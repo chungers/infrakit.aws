@@ -11,5 +11,8 @@
    "sample" : {{ include "https://httpbin.org/get" }},
 
    {{/* Load from URL and then parse as JSON then select an attribute */}}
-   "originIp" : "{{ include "https://httpbin.org/get" | jsonDecode | ref "/origin" }}"
+   "originIp" : "{{ include "https://httpbin.org/get" | jsonDecode | ref "/origin" }}",
+
+   {{/* Load from unix socket -- be sure to export SOCKET_DIR=dir and hostname is the filename */}}
+   "infrakitInstanceFile" : {{ include "unix://instance-file/meta/api.json" }}
 }
