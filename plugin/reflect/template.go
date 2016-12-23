@@ -13,6 +13,7 @@ type Template struct {
 	body   []byte
 	parsed *template.Template
 	funcs  map[string]interface{}
+	binds  map[string]interface{}
 	lock   sync.Mutex
 }
 
@@ -22,7 +23,7 @@ func NewTemplate(url string) (*Template, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Template{url: url, body: buff, funcs: map[string]interface{}{}}, nil
+	return &Template{url: url, body: buff, funcs: map[string]interface{}{}, binds: map[string]interface{}{}}, nil
 }
 
 // AddFunc adds a new function to support in template
