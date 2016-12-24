@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	arrayIndexExp = regexp.MustCompile("(.*)\\[([+|-]*[0-9]+)\\]$")
-	indexExp      = regexp.MustCompile("^\\[([+|-]*[0-9]+)\\]$")
+	indexRoot     = "\\[(([+|-]*[0-9]+)|((.*)=(.*)))\\]$"
+	arrayIndexExp = regexp.MustCompile("(.*)" + indexRoot)
+	indexExp      = regexp.MustCompile("^" + indexRoot)
 )
 
 func get(object interface{}, path []string) interface{} {
@@ -30,9 +31,9 @@ func get(object interface{}, path []string) interface{} {
 		return get(object, path[1:])
 	}
 
-	// check if key is an array index
+	// check if key is an array index of the form <1>[<2>]
 	matches := arrayIndexExp.FindStringSubmatch(key)
-	if len(matches) == 3 && matches[1] != "" {
+	if len(matches) > 2 && matches[1] != "" {
 		key = matches[1]
 		path = append([]string{key, fmt.Sprintf("[%s]", matches[2])}, path[1:]...)
 		return get(object, path)
@@ -43,19 +44,38 @@ func get(object interface{}, path []string) interface{} {
 	case reflect.Slice:
 		i := 0
 		matches = indexExp.FindStringSubmatch(key)
-		if len(matches) == 2 {
-			if index, err := strconv.Atoi(matches[1]); err == nil {
-				switch {
-				case index >= 0 && v.Len() > index:
-					i = index
-				case index < 0 && v.Len() > -index: // negative index like python
-					i = v.Len() + index
+		if len(matches) > 0 {
+			if matches[2] != "" {
+				// numeric index
+				if index, err := strconv.Atoi(matches[1]); err == nil {
+					switch {
+					case index >= 0 && v.Len() > index:
+						i = index
+					case index < 0 && v.Len() > -index: // negative index like python
+						i = v.Len() + index
+					}
+				}
+				return get(v.Index(i).Interface(), path[1:])
+
+			} else if matches[3] != "" {
+				// equality search index for 'field=check'
+				lhs := matches[4] // supports another select expression for extractly deeply from the struct
+				rhs := matches[5]
+				// loop through the array looking for field that matches the check value
+				for j := 0; j < v.Len(); j++ {
+					if el := get(v.Index(j).Interface(), tokenize(lhs)); el != nil {
+						if fmt.Sprintf("%v", el) == rhs {
+							return get(v.Index(j).Interface(), path[1:])
+						}
+					}
 				}
 			}
 		}
-		return get(v.Index(i).Interface(), path[1:])
 	case reflect.Map:
-		return get(v.MapIndex(reflect.ValueOf(key)).Interface(), path[1:])
+		value := v.MapIndex(reflect.ValueOf(key))
+		if value.IsValid() {
+			return get(value.Interface(), path[1:])
+		}
 	case reflect.Struct:
 		return get(v.FieldByName(key).Interface(), path[1:])
 	}

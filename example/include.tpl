@@ -14,5 +14,16 @@
    "originIp" : "{{ include "https://httpbin.org/get" | jsonDecode | ref "/origin" }}",
 
    {{/* Load from unix socket -- be sure to export SOCKET_DIR=dir and hostname is the filename */}}
-   "infrakitInstanceFile" : {{ include "unix://instance-file/meta/api.json" }}
+   "infrakitInstanceFile" : {{ include "unix://instance-file/meta/api.json" }},
+
+   {{/*
+   Select from array with selector expression matching field value.  Note the selector can be itself complex and
+   descends into each element of the array to select the value for comparison.  The node that has the first match
+   is then used to continue past the [] of the selection expression.7
+   */}}
+   {{ with $pluginMeta := "unix://instance-file/meta/api.json" }}
+   {{ with $select := "Interfaces[Name=Instance]/Methods['Request/method'=Instance.Validate]/Request/params" }}
+   "infrakitInstanceFile_ProvisionProperties" : {{ include $pluginMeta |jsonDecode | ref $select | jsonEncode }}
+   {{ end }}
+   {{ end }}
 }

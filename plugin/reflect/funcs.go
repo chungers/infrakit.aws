@@ -44,7 +44,6 @@ func (t *Template) DefaultFuncs() map[string]interface{} {
 			if len(opt) > 0 {
 				o = opt[0]
 			}
-
 			loc, err := getURL(t.url, p)
 			if err != nil {
 				return "", err
@@ -52,6 +51,10 @@ func (t *Template) DefaultFuncs() map[string]interface{} {
 			included, err := NewTemplate(loc)
 			if err != nil {
 				return "", err
+			}
+			// copy the binds in the parent scope into the child
+			for k, v := range t.binds {
+				included.binds[k] = v
 			}
 			// inherit the functions defined for this template
 			for k, v := range t.funcs {
