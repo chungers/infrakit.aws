@@ -45,7 +45,3 @@ func (c *cfnPlugin) Render(templateURL string, context interface{}) (string, err
 	})
 	return t.Render(context)
 }
-
-func (c *cfnPlugin) Inspect(name string) (EnvironmentModel, error) {
-	return cfn(c.clients, name)
-}

@@ -2,6 +2,7 @@ package reflect
 
 import (
 	"bytes"
+	"strings"
 	"sync"
 	"text/template"
 
@@ -18,12 +19,20 @@ type Template struct {
 }
 
 // NewTemplate fetches the content at the url and returns a template
-func NewTemplate(url string) (*Template, error) {
-	buff, err := fetch(url)
-	if err != nil {
-		return nil, err
+func NewTemplate(s string) (*Template, error) {
+	var buff []byte
+	// Special case of specifying the entire template as a string; otherwise treat as url
+	if strings.Index(s, "str://") == 0 {
+		buff = []byte(strings.Replace(s, "str://", "", 1))
+	} else {
+		b, err := fetch(s)
+		if err != nil {
+			return nil, err
+		}
+		buff = b
 	}
-	return &Template{url: url, body: buff, funcs: map[string]interface{}{}, binds: map[string]interface{}{}}, nil
+
+	return &Template{url: s, body: buff, funcs: map[string]interface{}{}, binds: map[string]interface{}{}}, nil
 }
 
 // AddFunc adds a new function to support in template

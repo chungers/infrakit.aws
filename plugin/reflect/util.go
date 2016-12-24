@@ -137,7 +137,6 @@ func fetch(s string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	switch u.Scheme {
 	case "file":
 		return ioutil.ReadFile(u.Path)

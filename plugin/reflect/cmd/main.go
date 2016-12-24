@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -46,22 +45,15 @@ func main() {
 		Use:   "inspect",
 		Short: "Inspect stack",
 		RunE: func(c *cobra.Command, args []string) error {
-
 			if reflector == nil {
 				return fmt.Errorf("no plugin")
 			}
-
-			model, err := reflector.Inspect(stack)
+			tpl := fmt.Sprintf(`str://{{ with cfn "%s" }}{{. | jsonEncode}}{{end}}`, stack) // use generalized templating
+			view, err := reflector.Render(tpl, nil)
 			if err != nil {
 				return err
 			}
-
-			buff, err := json.MarshalIndent(model, "", "  ")
-			if err != nil {
-				return err
-			}
-
-			fmt.Println(string(buff))
+			fmt.Println(view)
 			return nil
 		},
 	}

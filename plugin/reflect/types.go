@@ -13,9 +13,6 @@ type EnvironmentModel struct {
 
 // Plugin defines the possible interfactions with the reflection service
 type Plugin interface {
-	// Inspect introspects the environment / stack by name.  For cloudformation, this is the stack name.
-	Inspect(name string) (EnvironmentModel, error)
-
 	// Render the template at the given URL to produce a global spec for InfraKit.
 	Render(templateURL string, context interface{}) (string, error)
 }
