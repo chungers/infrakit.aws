@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/cloudformation"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/docker/infrakit/pkg/template"
 )
 
 var (
@@ -36,7 +37,7 @@ func doDescribe(r *cloudformation.StackResource, c call) (interface{}, error) {
 		return nil, err
 	}
 
-	return get(resp[0].Interface(), tokenize(c.selector)), err
+	return template.QueryObject(c.selector, resp[0].Interface())
 }
 
 var describeFuncs = map[string]func(AWSClients, *cloudformation.StackResource) (interface{}, error){
@@ -46,7 +47,7 @@ var describeFuncs = map[string]func(AWSClients, *cloudformation.StackResource) (
 			input: &autoscaling.DescribeLaunchConfigurationsInput{
 				LaunchConfigurationNames: []*string{r.PhysicalResourceId},
 			},
-			selector: "/LaunchConfigurations[0]",
+			selector: "LaunchConfigurations | [0]",
 		})
 	},
 	"AWS::AutoScaling::AutoScalingGroup": func(clients AWSClients, r *cloudformation.StackResource) (interface{}, error) {
@@ -55,7 +56,7 @@ var describeFuncs = map[string]func(AWSClients, *cloudformation.StackResource) (
 			input: &autoscaling.DescribeAutoScalingGroupsInput{
 				AutoScalingGroupNames: []*string{r.PhysicalResourceId},
 			},
-			selector: "/AutoScalingGroups[0]",
+			selector: "AutoScalingGroups | [0]",
 		})
 	},
 	"AWS::EC2::Subnet": func(clients AWSClients, r *cloudformation.StackResource) (interface{}, error) {
@@ -64,7 +65,7 @@ var describeFuncs = map[string]func(AWSClients, *cloudformation.StackResource) (
 			input: &ec2.DescribeSubnetsInput{
 				SubnetIds: []*string{r.PhysicalResourceId},
 			},
-			selector: "/Subnets[0]",
+			selector: "Subnets | [0]",
 		})
 	},
 	"AWS::EC2::VPC": func(clients AWSClients, r *cloudformation.StackResource) (interface{}, error) {
@@ -73,7 +74,7 @@ var describeFuncs = map[string]func(AWSClients, *cloudformation.StackResource) (
 			input: &ec2.DescribeVpcsInput{
 				VpcIds: []*string{r.PhysicalResourceId},
 			},
-			selector: "/Vpcs[0]",
+			selector: "Vpcs | [0]",
 		})
 	},
 }
@@ -86,7 +87,7 @@ func describe(clients AWSClients, r *cloudformation.StackResource) (interface{},
 	return nil, ErrNotSupported
 }
 
-func cfn(clients AWSClients, name string) (EnvironmentModel, error) {
+func cfn(clients AWSClients, name string) (interface{}, error) {
 	model := EnvironmentModel{}
 
 	input := cloudformation.DescribeStacksInput{
@@ -110,7 +111,7 @@ func cfn(clients AWSClients, name string) (EnvironmentModel, error) {
 	}
 
 	// index resources by type/name
-	resources := map[string]map[string]interface{}{}
+	resources := []interface{}{}
 	for _, r := range output2.StackResources {
 		if r.ResourceType == nil {
 			continue
@@ -118,23 +119,23 @@ func cfn(clients AWSClients, name string) (EnvironmentModel, error) {
 		if r.LogicalResourceId == nil {
 			continue
 		}
-
-		if resources[*r.ResourceType] == nil {
-			resources[*r.ResourceType] = map[string]interface{}{}
-		}
-		resources[*r.ResourceType][*r.LogicalResourceId] = r
+		resources = append(resources, r)
 	}
 	model.Resources = resources
 
 	// index parameters by name
-	parameters := map[string]interface{}{}
+	parameters := []interface{}{}
 	for _, p := range output.Stacks[0].Parameters {
 		if p.ParameterKey == nil {
 			continue
 		}
-		parameters[*p.ParameterKey] = p
+		parameters = append(parameters, p)
 	}
 	model.Parameters = parameters
 
-	return model, nil
+	// JMESPath package has trouble with fields that are pointers
+	return template.ToMap(map[string]interface{}{
+		"Resources":  resources,
+		"Parameters": parameters,
+	})
 }

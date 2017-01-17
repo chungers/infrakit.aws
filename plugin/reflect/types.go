@@ -5,10 +5,10 @@ package reflect
 type EnvironmentModel struct {
 
 	// Resources is an index of resource by type name, then name.
-	Resources map[string]map[string]interface{}
+	Resources []interface{}
 
 	// Parameters is an index of user-defined parameters.
-	Parameters map[string]interface{}
+	Parameters []interface{}
 }
 
 // Plugin defines the possible interfactions with the reflection service
